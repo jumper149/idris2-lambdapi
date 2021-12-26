@@ -1,0 +1,13 @@
+package lambdapi
+
+modules = Main
+
+main = Main
+
+depends = contrib
+        , elab-util
+        , sop
+
+executable = lambdapi
+
+sourcedir = "src"
