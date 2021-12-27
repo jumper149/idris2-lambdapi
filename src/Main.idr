@@ -137,11 +137,11 @@ mutual
              Either String ()
   typeDown n context (Infer e) t = do
     t' <- typeUp n context e
-    unless (quote0 t == quote0 t') $ Left "type mismatch"
+    unless (quote0 t == quote0 t') $ Left "type mismatch1"
   typeDown n context (Lam e) (VPi t t') =
     typeDown (S n) ((Local n, t) :: context)
                    (substDown 0 (Free (Local n)) e) (t' (vfree (Local n)))
-  typeDown n context _ _ = Left "type mismatch"
+  typeDown n context _ _ = Left "type mismatch2"
 
 
 typeUp0 : (context : List (BoundName, Value)) ->
@@ -151,10 +151,30 @@ typeUp0 = typeUp 0
 
 main : IO ()
 main = do
+  let env1 = [ (Global "a", VStar)
+             , (Global "b", VStar)
+             ]
+
   let id' = Lam (Infer (Bound 0))
   let idType' = Infer (Pi (Infer Star) (Infer Star))
-  let idDependent = Lam (Lam (Infer (Bound 0)))
-  let idDependentType = Infer (Pi (Infer Star) (Infer (Pi (Infer $ Bound 0) (Infer $ Bound 0))))
+  let idType1' = Infer (Pi (Infer (Free (Global "a"))) (Infer (Free (Global "a"))))
   printLn $ map quote0 $ typeUp0 [] $ Ann id' idType'
-  printLn $ map quote0 $ typeUp0 [] $ Ann idDependent idDependentType
+  printLn $ map quote0 $ typeUp0 env1 $ Ann id' idType1'
+
+  let const' = Lam (Lam (Infer (Bound 1)))
+  let constType' = Infer (Pi (Infer Star) (Infer (Pi (Infer Star) (Infer Star))))
+  let constType1' = Infer (Pi (Infer (Free (Global "a"))) (Infer (Pi (Infer (Free (Global "b"))) (Infer (Free (Global "a"))))))
+  printLn $ map quote0 $ typeUp0 [] $ Ann const' constType'
+  printLn $ map quote0 $ typeUp0 env1 $ Ann const' constType1'
+
+  let idDependent = Lam (Lam (Infer (Bound 0)))
+  let idDependentType =
+    Infer (Pi (Infer Star)
+              (Infer (Pi (Infer $ Free $ Local 0)
+                         (Infer $ Free $ Local 0)
+                     )
+              )
+          )
+  printLn $ map quote0 $ typeUp0 env1 $ Ann idDependent idDependentType
+  printLn $ quote0 $ evalDown (Infer $ ((Ann idDependent idDependentType) `At` Infer Star) `At` Infer Star) []
   pure ()
