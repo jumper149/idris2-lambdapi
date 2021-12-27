@@ -5,7 +5,9 @@ import Generics.Derive
 %language ElabReflection
 
 mutual
-  data TermUp = Ann TermDown Typ
+  data TermUp = Ann TermDown TermDown
+              | Star
+              | Pi TermDown TermDown
               | Bound Nat
               | Free BoundName
               | At TermUp TermDown
@@ -13,14 +15,13 @@ mutual
   data TermDown = Infer TermUp
                 | Lam TermDown
 
-  data Typ = TFree BoundName
-           | Fun Typ Typ
-
   data BoundName = Global String
                  | Local Nat
                  | Quote Nat
 
   data Value = VLam (Value -> Value)
+             | VStar
+             | VPi Value (Value -> Value)
              | VNeutral Neutral
 
   data Neutral = NFree BoundName
@@ -29,7 +30,6 @@ mutual
 %runElab deriveMutual
   [ ("TermUp"   , [ Eq, Generic, Meta, Ord, Show ])
   , ("TermDown" , [ Eq, Generic, Meta, Ord, Show ])
-  , ("Typ"      , [ Eq, Generic, Meta, Ord, Show ])
   , ("BoundName", [ Eq, Generic, Meta, Ord, Show ])
   ]
 
@@ -41,6 +41,7 @@ vapp : (v : Value) ->
        Value
 vapp (VLam f) v = f v
 vapp (VNeutral n) v = VNeutral (NApp n v)
+vapp _ _ = ?impossibleVapp
 
 mutual
   evalUp : (term : TermUp) ->
@@ -48,6 +49,8 @@ mutual
            (env : Vect n Value) ->
            Value
   evalUp (Ann e _) env = evalDown e env
+  evalUp Star env = VStar
+  evalUp (Pi t t') env = VPi (evalDown t env) (\ x => evalDown t' (x :: env))
   evalUp (Bound i) env = case natToFin i n of
     Nothing => ?lookupListErr
     Just i' => index i' env
@@ -61,31 +64,14 @@ mutual
   evalDown (Infer i) env = evalUp i env
   evalDown (Lam e) env = VLam $ \ x => evalDown e $ x :: env
 
-data Kind = Star
-%runElab derive "Kind" [ Eq, Generic, Meta, Ord, Show ]
-
-data Info = HasKind Kind
-          | HasType Typ
-%runElab derive "Info" [ Eq, Generic, Meta, Ord, Show ]
-
-kindDown : (context : List (BoundName, Info)) ->
-           (type : Typ) ->
-           (kind : Kind) ->
-           Either String ()
-kindDown context (TFree x) Star = case lookup x context of
-  Just (HasKind Star) => Right ()
-  Just (HasType _) => Left "unexpected type"
-  Nothing => Left "unknown identifier"
-kindDown context (Fun k k') Star = do
-  kindDown context k Star
-  kindDown context k' Star
-
 mutual
   substUp : (n : Nat) ->
             (term1 : TermUp) ->
             (term2 : TermUp) ->
             TermUp
   substUp n term1 (Ann e t) = Ann (substDown n term1 e) t
+  substUp n term1 Star = Star
+  substUp n term1 (Pi t t') = Pi (substDown n term1 t) (substDown (S n) term1 t')
   substUp n term1 (Bound i) = if n == i then term1 else Bound i
   substUp n term1 (Free x) = Free x
   substUp n term1 (At e e') = substUp n term1 e `At` substDown n term1 e'
@@ -103,6 +89,8 @@ mutual
           TermDown
   quote n (VLam f) = Lam $ quote (S n) (f (vfree (Quote n)))
   quote n (VNeutral x) = Infer $ neutralQuote n x
+  quote n VStar = Infer Star
+  quote n (VPi x f) = Infer $ Pi (quote n x) (quote (S n) $ f $ vfree $ Quote n)
 
   neutralQuote : Nat -> Neutral -> TermUp
   neutralQuote i (NFree x) = case x of
@@ -115,62 +103,58 @@ quote0 = quote 0
 
 mutual
   typeUp : (n : Nat) ->
-           (context : List (BoundName, Info)) ->
+           (context : List (BoundName, Value)) ->
            (term : TermUp) ->
-           Either String Typ
-  typeUp n context (Ann e t) = do
-    kindDown context t Star
+           Either String Value
+  typeUp n context (Ann e p) = do
+    typeDown n context p VStar
+    let t = evalDown p []
     typeDown n context e t
     Right t
+  typeUp n context Star = Right VStar
+  typeUp n context (Pi p p') = do
+    typeDown n context p VStar
+    let t = evalDown p []
+    typeDown (S n) ((Local n, t) :: context)
+                   (substDown 0 (Free (Local n)) p') VStar
+    Right VStar
   typeUp n context (Bound i) = ?inferTypeErr
   typeUp n context (Free x) = case lookup x context of
     Nothing => Left "unknown identifier"
-    Just (HasKind Star) => Left "unexpected kind"
-    Just (HasType t) => Right t
+    Just t => Right t
   typeUp n context (At e e') = do
     sigma <- typeUp n context e
     case sigma of
-         Fun t t' => do
+         VPi t t' => do
            typeDown n context e' t
-           Right t'
+           Right (t' (evalDown e' []))
          _ => Left "illegal application"
 
   typeDown : (n : Nat) ->
-             (context : List (BoundName, Info)) ->
+             (context : List (BoundName, Value)) ->
              (term : TermDown) ->
-             (t : Typ) ->
+             (t : Value) ->
              Either String ()
   typeDown n context (Infer e) t = do
     t' <- typeUp n context e
-    unless (t == t') $ Left "type mismatch"
-  typeDown n context (Lam e) (Fun t t') =
-    typeDown (S n) ((Local n, HasType t) :: context)
-                   (substDown 0 (Free (Local n)) e) t'
-  typeDown n context (Lam _) (TFree _) = Left "type mismatch"
+    unless (quote0 t == quote0 t') $ Left "type mismatch"
+  typeDown n context (Lam e) (VPi t t') =
+    typeDown (S n) ((Local n, t) :: context)
+                   (substDown 0 (Free (Local n)) e) (t' (vfree (Local n)))
+  typeDown n context _ _ = Left "type mismatch"
 
 
-typeUp0 : (context : List (BoundName, Info)) ->
+typeUp0 : (context : List (BoundName, Value)) ->
           (term : TermUp) ->
-          Either String Typ
+          Either String Value
 typeUp0 = typeUp 0
 
 main : IO ()
 main = do
   let id' = Lam (Infer (Bound 0))
-  let const' = Lam (Lam (Infer (Bound 1)))
-  let tfree = \ a => TFree (Global a)
-  let free = \ x => Infer (Free (Global x))
-  let term1 = Ann id' (Fun (tfree "a") (tfree "a")) `At` free "y"
-  let term2 = (Ann const' (Fun (Fun (tfree "b") (tfree "b"))
-                          (Fun (tfree "a")
-                               (Fun (tfree "b") (tfree "b"))))
-                `At` id') `At` free "y"
-  let env1 = [ (Global "y", HasType (tfree "a"))
-             , (Global "a", HasKind Star)
-             ]
-  let env2 = (Global "b", HasKind Star) :: env1
-  printLn $ quote0 (evalUp term1 [])
-  printLn $ quote0 (evalUp term2 [])
-  printLn $ typeUp0 env1 term1
-  printLn $ typeUp0 env2 term2
+  let idType' = Infer (Pi (Infer Star) (Infer Star))
+  let idDependent = Lam (Lam (Infer (Bound 0)))
+  let idDependentType = Infer (Pi (Infer Star) (Infer (Pi (Infer $ Bound 0) (Infer $ Bound 0))))
+  printLn $ map quote0 $ typeUp0 [] $ Ann id' idType'
+  printLn $ map quote0 $ typeUp0 [] $ Ann idDependent idDependentType
   pure ()
