@@ -110,7 +110,7 @@ mutual
     typeCheckable n context p VStar
     let t = evalCheckable p []
     typeCheckable (S n) ((Local n, t) :: context)
-                   (substCheckable 0 (Free (Local n)) p') VStar
+                        (substCheckable 0 (Free (Local n)) p') VStar
     Right VStar
   typeInferable n context (Bound i) = ?inferTypeErr
   typeInferable n context (Free x) = case lookup x context of
