@@ -96,52 +96,52 @@ quote0 : Value -> TermCheckable
 quote0 = quote 0
 
 mutual
-  typeUp : (n : Nat) ->
-           (context : List (Reference, Value)) ->
-           (term : TermInferable) ->
-           Either String Value
-  typeUp n context (Ann e p) = do
-    typeDown n context p VStar
+  typeInferable : (n : Nat) ->
+                  (context : List (Reference, Value)) ->
+                  (term : TermInferable) ->
+                  Either String Value
+  typeInferable n context (Ann e p) = do
+    typeCheckable n context p VStar
     let t = evalCheckable p []
-    typeDown n context e t
+    typeCheckable n context e t
     Right t
-  typeUp n context Star = Right VStar
-  typeUp n context (Pi p p') = do
-    typeDown n context p VStar
+  typeInferable n context Star = Right VStar
+  typeInferable n context (Pi p p') = do
+    typeCheckable n context p VStar
     let t = evalCheckable p []
-    typeDown (S n) ((Local n, t) :: context)
+    typeCheckable (S n) ((Local n, t) :: context)
                    (substCheckable 0 (Free (Local n)) p') VStar
     Right VStar
-  typeUp n context (Bound i) = ?inferTypeErr
-  typeUp n context (Free x) = case lookup x context of
+  typeInferable n context (Bound i) = ?inferTypeErr
+  typeInferable n context (Free x) = case lookup x context of
     Nothing => Left "unknown identifier"
     Just t => Right t
-  typeUp n context (At e e') = do
-    sigma <- typeUp n context e
+  typeInferable n context (At e e') = do
+    sigma <- typeInferable n context e
     case sigma of
          VPi t t' => do
-           typeDown n context e' t
+           typeCheckable n context e' t
            Right (t' (evalCheckable e' []))
          _ => Left "illegal application"
 
-  typeDown : (n : Nat) ->
-             (context : List (Reference, Value)) ->
-             (term : TermCheckable) ->
-             (t : Value) ->
-             Either String ()
-  typeDown n context (Inferred e) t = do
-    t' <- typeUp n context e
+  typeCheckable : (n : Nat) ->
+                  (context : List (Reference, Value)) ->
+                  (term : TermCheckable) ->
+                  (t : Value) ->
+                  Either String ()
+  typeCheckable n context (Inferred e) t = do
+    t' <- typeInferable n context e
     unless (quote0 t == quote0 t') $ Left "type mismatch1"
-  typeDown n context (Lambda e) (VPi t t') =
-    typeDown (S n) ((Local n, t) :: context)
+  typeCheckable n context (Lambda e) (VPi t t') =
+    typeCheckable (S n) ((Local n, t) :: context)
                    (substCheckable 0 (Free (Local n)) e) (t' (vfree (Local n)))
-  typeDown n context _ _ = Left "type mismatch2"
+  typeCheckable n context _ _ = Left "type mismatch2"
 
 
-typeUp0 : (context : List (Reference, Value)) ->
-          (term : TermInferable) ->
-          Either String Value
-typeUp0 = typeUp 0
+typeInferable0 : (context : List (Reference, Value)) ->
+                 (term : TermInferable) ->
+                 Either String Value
+typeInferable0 = typeInferable 0
 
 main : IO ()
 main = do
@@ -152,14 +152,14 @@ main = do
   let id' = Lambda (Inferred (Bound 0))
   let idType' = Inferred (Pi (Inferred Star) (Inferred Star))
   let idType1' = Inferred (Pi (Inferred (Free (Global "a"))) (Inferred (Free (Global "a"))))
-  printLn $ map quote0 $ typeUp0 [] $ Ann id' idType'
-  printLn $ map quote0 $ typeUp0 env1 $ Ann id' idType1'
+  printLn $ map quote0 $ typeInferable0 [] $ Ann id' idType'
+  printLn $ map quote0 $ typeInferable0 env1 $ Ann id' idType1'
 
   let const' = Lambda (Lambda (Inferred (Bound 1)))
   let constType' = Inferred (Pi (Inferred Star) (Inferred (Pi (Inferred Star) (Inferred Star))))
   let constType1' = Inferred (Pi (Inferred (Free (Global "a"))) (Inferred (Pi (Inferred (Free (Global "b"))) (Inferred (Free (Global "a"))))))
-  printLn $ map quote0 $ typeUp0 [] $ Ann const' constType'
-  printLn $ map quote0 $ typeUp0 env1 $ Ann const' constType1'
+  printLn $ map quote0 $ typeInferable0 [] $ Ann const' constType'
+  printLn $ map quote0 $ typeInferable0 env1 $ Ann const' constType1'
 
   let idDependent = Lambda (Lambda (Inferred (Bound 0)))
   let idDependentType =
@@ -169,6 +169,6 @@ main = do
                      )
               )
           )
-  printLn $ map quote0 $ typeUp0 env1 $ Ann idDependent idDependentType
+  printLn $ map quote0 $ typeInferable0 env1 $ Ann idDependent idDependentType
   printLn $ quote0 $ evalInferable (((Ann idDependent idDependentType) `At` Inferred Star) `At` Inferred Star) []
   pure ()
