@@ -59,23 +59,23 @@ mutual
   evalCheckable (Lambda e) env = VLambda $ \ x => evalCheckable e $ x :: env
 
 mutual
-  substInferable : (n : Nat) ->
+  substInferable : (i : Nat) ->
                    (r : TermInferable) ->
                    (term : TermInferable) ->
                    TermInferable
-  substInferable n r (Ann e t) = Ann (substCheckable n r e) (substCheckable n r t)
-  substInferable n r Star = Star
-  substInferable n r (Pi t t') = Pi (substCheckable n r t) (substCheckable (S n) r t')
-  substInferable n r (Bound i) = if n == i then r else Bound i
-  substInferable n r (Free x) = Free x
-  substInferable n r (At e e') = substInferable n r e `At` substCheckable n r e'
+  substInferable i r (Ann e t) = Ann (substCheckable i r e) (substCheckable i r t)
+  substInferable i r Star = Star
+  substInferable i r (Pi t t') = Pi (substCheckable i r t) (substCheckable (S i) r t')
+  substInferable i r (Bound j) = if i == j then r else Bound j
+  substInferable i r (Free x) = Free x
+  substInferable i r (At e e') = substInferable i r e `At` substCheckable i r e'
 
-  substCheckable : (n : Nat) ->
+  substCheckable : (i : Nat) ->
                    (r : TermInferable) ->
                    (term : TermCheckable) ->
                    TermCheckable
-  substCheckable n r (Inferred e) = Inferred $ substInferable n r e
-  substCheckable n r (Lambda e) = Lambda $ substCheckable (S n) r e
+  substCheckable i r (Inferred e) = Inferred $ substInferable i r e
+  substCheckable i r (Lambda e) = Lambda $ substCheckable (S i) r e
 
 mutual
   quote : (n : Nat) ->
@@ -164,11 +164,12 @@ main = do
   let idDependent = Lambda (Lambda (Inferred (Bound 0)))
   let idDependentType =
     Inferred (Pi (Inferred Star)
-              (Inferred (Pi (Inferred $ Free $ Local 0)
-                         (Inferred $ Free $ Local 0)
-                     )
-              )
-          )
-  printLn $ map quote0 $ typeInferable0 env1 $ Ann idDependent idDependentType
-  printLn $ quote0 $ evalInferable (((Ann idDependent idDependentType) `At` Inferred Star) `At` Inferred Star) []
+             (Inferred (Pi (Inferred $ Free $ Local 0)
+                           (Inferred $ Free $ Local 0)
+                       )
+             )
+             )
+  printLn $ map quote0 $ typeInferable0 [] $ Ann idDependent idDependentType
+  printLn $ map quote0 $ typeInferable0 [] $ Ann idDependent idDependentType `At` Inferred Star
+  printLn $ map quote0 $ typeInferable0 [] $ (Ann idDependent idDependentType `At` Inferred Star) `At` Inferred Star
   pure ()
