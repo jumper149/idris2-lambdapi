@@ -9,13 +9,13 @@ mutual
               | Star
               | Pi TermDown TermDown
               | Bound Nat
-              | Free BoundName
+              | Free Reference
               | At TermUp TermDown
 
   data TermDown = Infer TermUp
                 | Lam TermDown
 
-  data BoundName = Global String
+  data Reference = Global String
                  | Local Nat
                  | Quote Nat
 
@@ -24,16 +24,16 @@ mutual
              | VPi Value (Value -> Value)
              | VNeutral Neutral
 
-  data Neutral = NFree BoundName
+  data Neutral = NFree Reference
                | NApp Neutral Value
 
 %runElab deriveMutual
   [ ("TermUp"   , [ Eq, Generic, Meta, Ord, Show ])
   , ("TermDown" , [ Eq, Generic, Meta, Ord, Show ])
-  , ("BoundName", [ Eq, Generic, Meta, Ord, Show ])
+  , ("Reference", [ Eq, Generic, Meta, Ord, Show ])
   ]
 
-vfree : BoundName -> Value
+vfree : Reference -> Value
 vfree = VNeutral . NFree
 
 vapp : (v : Value) ->
@@ -103,7 +103,7 @@ quote0 = quote 0
 
 mutual
   typeUp : (n : Nat) ->
-           (context : List (BoundName, Value)) ->
+           (context : List (Reference, Value)) ->
            (term : TermUp) ->
            Either String Value
   typeUp n context (Ann e p) = do
@@ -131,7 +131,7 @@ mutual
          _ => Left "illegal application"
 
   typeDown : (n : Nat) ->
-             (context : List (BoundName, Value)) ->
+             (context : List (Reference, Value)) ->
              (term : TermDown) ->
              (t : Value) ->
              Either String ()
@@ -144,7 +144,7 @@ mutual
   typeDown n context _ _ = Left "type mismatch2"
 
 
-typeUp0 : (context : List (BoundName, Value)) ->
+typeUp0 : (context : List (Reference, Value)) ->
           (term : TermUp) ->
           Either String Value
 typeUp0 = typeUp 0
