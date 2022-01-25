@@ -45,21 +45,19 @@ vapp _ _ = ?impossibleVapp
 
 mutual
   evalUp : (term : TermUp) ->
-           {n : Nat} ->
-           (env : Vect n Value) ->
+           (env : List Value) ->
            Value
   evalUp (Ann e _) env = evalDown e env
   evalUp Star env = VStar
   evalUp (Pi t t') env = VPi (evalDown t env) (\ x => evalDown t' (x :: env))
-  evalUp (Bound i) env = case natToFin i n of
+  evalUp (Bound i) env = case natToFin i (length env) of
     Nothing => ?lookupListErr
-    Just i' => index i' env
+    Just i' => index' env i'
   evalUp (Free x) env = vfree x
   evalUp (At e e') env = vapp (evalUp e env) (evalDown e' env)
 
   evalDown : (term : TermDown) ->
-             {n : Nat} ->
-             (env : Vect n Value) ->
+             (env : List Value) ->
              Value
   evalDown (Infer i) env = evalUp i env
   evalDown (Lam e) env = VLam $ \ x => evalDown e $ x :: env
