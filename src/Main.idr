@@ -69,7 +69,7 @@ mutual
             (term1 : TermUp) ->
             (term2 : TermUp) ->
             TermUp
-  substUp n term1 (Ann e t) = Ann (substDown n term1 e) t
+  substUp n term1 (Ann e t) = Ann (substDown n term1 e) (substDown n term1 t)
   substUp n term1 Star = Star
   substUp n term1 (Pi t t') = Pi (substDown n term1 t) (substDown (S n) term1 t')
   substUp n term1 (Bound i) = if n == i then term1 else Bound i
