@@ -12,14 +12,14 @@ mutual
                      | Free Reference
                      | At TermInferable TermCheckable
 
-  data TermCheckable = Infer TermInferable
-                     | Lam TermCheckable
+  data TermCheckable = Inferred TermInferable
+                     | Lambda TermCheckable
 
   data Reference = Global String
                  | Local Nat
                  | Quote Nat
 
-  data Value = VLam (Value -> Value)
+  data Value = VLambda (Value -> Value)
              | VStar
              | VPi Value (Value -> Value)
              | VNeutral Neutral
@@ -49,14 +49,14 @@ mutual
   evalInferable (Free x) env = vfree x
   evalInferable (At e e') env = vapp (evalInferable e env) (evalCheckable e' env)
     where vapp : (v : Value) -> (v' : Value) -> Value
-          vapp (VLam f) v = f v
+          vapp (VLambda f) v = f v
           vapp (VNeutral n) v = VNeutral (NApp n v)
           vapp _ _ = ?impossibleVapp
   evalCheckable : (term : TermCheckable) ->
                   (env : List Value) ->
                   Value
-  evalCheckable (Infer i) env = evalInferable i env
-  evalCheckable (Lam e) env = VLam $ \ x => evalCheckable e $ x :: env
+  evalCheckable (Inferred i) env = evalInferable i env
+  evalCheckable (Lambda e) env = VLambda $ \ x => evalCheckable e $ x :: env
 
 mutual
   substInferable : (n : Nat) ->
@@ -74,17 +74,17 @@ mutual
                    (term1 : TermInferable) ->
                    (term2 : TermCheckable) ->
                    TermCheckable
-  substCheckable n term1 (Infer e) = Infer $ substInferable n term1 e
-  substCheckable n term1 (Lam e) = Lam $ substCheckable (S n) term1 e
+  substCheckable n term1 (Inferred e) = Inferred $ substInferable n term1 e
+  substCheckable n term1 (Lambda e) = Lambda $ substCheckable (S n) term1 e
 
 mutual
   quote : (n : Nat) ->
           (v : Value) ->
           TermCheckable
-  quote n (VLam f) = Lam $ quote (S n) (f (vfree (Quote n)))
-  quote n (VNeutral x) = Infer $ neutralQuote n x
-  quote n VStar = Infer Star
-  quote n (VPi x f) = Infer $ Pi (quote n x) (quote (S n) $ f $ vfree $ Quote n)
+  quote n (VLambda f) = Lambda $ quote (S n) (f (vfree (Quote n)))
+  quote n (VNeutral x) = Inferred $ neutralQuote n x
+  quote n VStar = Inferred Star
+  quote n (VPi x f) = Inferred $ Pi (quote n x) (quote (S n) $ f $ vfree $ Quote n)
 
   neutralQuote : Nat -> Neutral -> TermInferable
   neutralQuote i (NFree x) = case x of
@@ -129,10 +129,10 @@ mutual
              (term : TermCheckable) ->
              (t : Value) ->
              Either String ()
-  typeDown n context (Infer e) t = do
+  typeDown n context (Inferred e) t = do
     t' <- typeUp n context e
     unless (quote0 t == quote0 t') $ Left "type mismatch1"
-  typeDown n context (Lam e) (VPi t t') =
+  typeDown n context (Lambda e) (VPi t t') =
     typeDown (S n) ((Local n, t) :: context)
                    (substCheckable 0 (Free (Local n)) e) (t' (vfree (Local n)))
   typeDown n context _ _ = Left "type mismatch2"
@@ -149,26 +149,26 @@ main = do
              , (Global "b", VStar)
              ]
 
-  let id' = Lam (Infer (Bound 0))
-  let idType' = Infer (Pi (Infer Star) (Infer Star))
-  let idType1' = Infer (Pi (Infer (Free (Global "a"))) (Infer (Free (Global "a"))))
+  let id' = Lambda (Inferred (Bound 0))
+  let idType' = Inferred (Pi (Inferred Star) (Inferred Star))
+  let idType1' = Inferred (Pi (Inferred (Free (Global "a"))) (Inferred (Free (Global "a"))))
   printLn $ map quote0 $ typeUp0 [] $ Ann id' idType'
   printLn $ map quote0 $ typeUp0 env1 $ Ann id' idType1'
 
-  let const' = Lam (Lam (Infer (Bound 1)))
-  let constType' = Infer (Pi (Infer Star) (Infer (Pi (Infer Star) (Infer Star))))
-  let constType1' = Infer (Pi (Infer (Free (Global "a"))) (Infer (Pi (Infer (Free (Global "b"))) (Infer (Free (Global "a"))))))
+  let const' = Lambda (Lambda (Inferred (Bound 1)))
+  let constType' = Inferred (Pi (Inferred Star) (Inferred (Pi (Inferred Star) (Inferred Star))))
+  let constType1' = Inferred (Pi (Inferred (Free (Global "a"))) (Inferred (Pi (Inferred (Free (Global "b"))) (Inferred (Free (Global "a"))))))
   printLn $ map quote0 $ typeUp0 [] $ Ann const' constType'
   printLn $ map quote0 $ typeUp0 env1 $ Ann const' constType1'
 
-  let idDependent = Lam (Lam (Infer (Bound 0)))
+  let idDependent = Lambda (Lambda (Inferred (Bound 0)))
   let idDependentType =
-    Infer (Pi (Infer Star)
-              (Infer (Pi (Infer $ Free $ Local 0)
-                         (Infer $ Free $ Local 0)
+    Inferred (Pi (Inferred Star)
+              (Inferred (Pi (Inferred $ Free $ Local 0)
+                         (Inferred $ Free $ Local 0)
                      )
               )
           )
   printLn $ map quote0 $ typeUp0 env1 $ Ann idDependent idDependentType
-  printLn $ quote0 $ evalInferable (((Ann idDependent idDependentType) `At` Infer Star) `At` Infer Star) []
+  printLn $ quote0 $ evalInferable (((Ann idDependent idDependentType) `At` Inferred Star) `At` Inferred Star) []
   pure ()
