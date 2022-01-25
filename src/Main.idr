@@ -82,7 +82,7 @@ mutual
           (v : Value) ->
           TermCheckable
   quote i (VLambda f) = Lambda $ quote (S i) (f (vfree (Quote i)))
-  quote i (VNeutral x) = Inferred $ neutralQuote i x
+  quote i (VNeutral n) = Inferred $ neutralQuote i n
   quote i VStar = Inferred Star
   quote i (VPi x f) = Inferred $ Pi (quote i x) (quote (S i) $ f $ vfree $ Quote i)
 
