@@ -36,13 +36,6 @@ mutual
 vfree : Reference -> Value
 vfree = VNeutral . NFree
 
-vapp : (v : Value) ->
-       (v' : Value) ->
-       Value
-vapp (VLam f) v = f v
-vapp (VNeutral n) v = VNeutral (NApp n v)
-vapp _ _ = ?impossibleVapp
-
 mutual
   evalInferable : (term : TermInferable) ->
                   (env : List Value) ->
@@ -55,7 +48,10 @@ mutual
     Just i' => index' env i'
   evalInferable (Free x) env = vfree x
   evalInferable (At e e') env = vapp (evalInferable e env) (evalCheckable e' env)
-
+    where vapp : (v : Value) -> (v' : Value) -> Value
+          vapp (VLam f) v = f v
+          vapp (VNeutral n) v = VNeutral (NApp n v)
+          vapp _ _ = ?impossibleVapp
   evalCheckable : (term : TermCheckable) ->
                   (env : List Value) ->
                   Value
@@ -63,23 +59,23 @@ mutual
   evalCheckable (Lam e) env = VLam $ \ x => evalCheckable e $ x :: env
 
 mutual
-  substUp : (n : Nat) ->
-            (term1 : TermInferable) ->
-            (term2 : TermInferable) ->
-            TermInferable
-  substUp n term1 (Ann e t) = Ann (substDown n term1 e) (substDown n term1 t)
-  substUp n term1 Star = Star
-  substUp n term1 (Pi t t') = Pi (substDown n term1 t) (substDown (S n) term1 t')
-  substUp n term1 (Bound i) = if n == i then term1 else Bound i
-  substUp n term1 (Free x) = Free x
-  substUp n term1 (At e e') = substUp n term1 e `At` substDown n term1 e'
+  substInferable : (n : Nat) ->
+                   (term1 : TermInferable) ->
+                   (term2 : TermInferable) ->
+                   TermInferable
+  substInferable n term1 (Ann e t) = Ann (substCheckable n term1 e) (substCheckable n term1 t)
+  substInferable n term1 Star = Star
+  substInferable n term1 (Pi t t') = Pi (substCheckable n term1 t) (substCheckable (S n) term1 t')
+  substInferable n term1 (Bound i) = if n == i then term1 else Bound i
+  substInferable n term1 (Free x) = Free x
+  substInferable n term1 (At e e') = substInferable n term1 e `At` substCheckable n term1 e'
 
-  substDown : (n : Nat) ->
-              (term1 : TermInferable) ->
-              (term2 : TermCheckable) ->
-              TermCheckable
-  substDown n term1 (Infer e) = Infer $ substUp n term1 e
-  substDown n term1 (Lam e) = Lam $ substDown (S n) term1 e
+  substCheckable : (n : Nat) ->
+                   (term1 : TermInferable) ->
+                   (term2 : TermCheckable) ->
+                   TermCheckable
+  substCheckable n term1 (Infer e) = Infer $ substInferable n term1 e
+  substCheckable n term1 (Lam e) = Lam $ substCheckable (S n) term1 e
 
 mutual
   quote : (n : Nat) ->
@@ -114,7 +110,7 @@ mutual
     typeDown n context p VStar
     let t = evalCheckable p []
     typeDown (S n) ((Local n, t) :: context)
-                   (substDown 0 (Free (Local n)) p') VStar
+                   (substCheckable 0 (Free (Local n)) p') VStar
     Right VStar
   typeUp n context (Bound i) = ?inferTypeErr
   typeUp n context (Free x) = case lookup x context of
@@ -138,7 +134,7 @@ mutual
     unless (quote0 t == quote0 t') $ Left "type mismatch1"
   typeDown n context (Lam e) (VPi t t') =
     typeDown (S n) ((Local n, t) :: context)
-                   (substDown 0 (Free (Local n)) e) (t' (vfree (Local n)))
+                   (substCheckable 0 (Free (Local n)) e) (t' (vfree (Local n)))
   typeDown n context _ _ = Left "type mismatch2"
 
 
