@@ -131,11 +131,11 @@ mutual
                   Either String ()
   typeCheckable n context (Inferred e) t = do
     t' <- typeInferable n context e
-    unless (quote0 t == quote0 t') $ Left "type mismatch1"
+    unless (quote0 t == quote0 t') $ Left "type mismatch when checking inferred type"
   typeCheckable n context (Lambda e) (VPi t t') =
     typeCheckable (S n) ((Local n, t) :: context)
                    (substCheckable 0 (Free (Local n)) e) (t' (vfree (Local n)))
-  typeCheckable n context _ _ = Left "type mismatch2"
+  typeCheckable n context (Lambda e) _ = Left "expected pi type for lambda"
 
 
 typeInferable0 : (context : List (Reference, Value)) ->
