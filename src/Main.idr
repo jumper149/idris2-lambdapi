@@ -44,23 +44,23 @@ vapp (VNeutral n) v = VNeutral (NApp n v)
 vapp _ _ = ?impossibleVapp
 
 mutual
-  evalUp : (term : TermInferable) ->
-           (env : List Value) ->
-           Value
-  evalUp (Ann e _) env = evalDown e env
-  evalUp Star env = VStar
-  evalUp (Pi t t') env = VPi (evalDown t env) (\ x => evalDown t' (x :: env))
-  evalUp (Bound i) env = case natToFin i (length env) of
+  evalInferable : (term : TermInferable) ->
+                  (env : List Value) ->
+                  Value
+  evalInferable (Ann e _) env = evalCheckable e env
+  evalInferable Star env = VStar
+  evalInferable (Pi t t') env = VPi (evalCheckable t env) (\ x => evalCheckable t' (x :: env))
+  evalInferable (Bound i) env = case natToFin i (length env) of
     Nothing => ?lookupListErr
     Just i' => index' env i'
-  evalUp (Free x) env = vfree x
-  evalUp (At e e') env = vapp (evalUp e env) (evalDown e' env)
+  evalInferable (Free x) env = vfree x
+  evalInferable (At e e') env = vapp (evalInferable e env) (evalCheckable e' env)
 
-  evalDown : (term : TermCheckable) ->
-             (env : List Value) ->
-             Value
-  evalDown (Infer i) env = evalUp i env
-  evalDown (Lam e) env = VLam $ \ x => evalDown e $ x :: env
+  evalCheckable : (term : TermCheckable) ->
+                  (env : List Value) ->
+                  Value
+  evalCheckable (Infer i) env = evalInferable i env
+  evalCheckable (Lam e) env = VLam $ \ x => evalCheckable e $ x :: env
 
 mutual
   substUp : (n : Nat) ->
@@ -106,13 +106,13 @@ mutual
            Either String Value
   typeUp n context (Ann e p) = do
     typeDown n context p VStar
-    let t = evalDown p []
+    let t = evalCheckable p []
     typeDown n context e t
     Right t
   typeUp n context Star = Right VStar
   typeUp n context (Pi p p') = do
     typeDown n context p VStar
-    let t = evalDown p []
+    let t = evalCheckable p []
     typeDown (S n) ((Local n, t) :: context)
                    (substDown 0 (Free (Local n)) p') VStar
     Right VStar
@@ -125,7 +125,7 @@ mutual
     case sigma of
          VPi t t' => do
            typeDown n context e' t
-           Right (t' (evalDown e' []))
+           Right (t' (evalCheckable e' []))
          _ => Left "illegal application"
 
   typeDown : (n : Nat) ->
@@ -174,5 +174,5 @@ main = do
               )
           )
   printLn $ map quote0 $ typeUp0 env1 $ Ann idDependent idDependentType
-  printLn $ quote0 $ evalDown (Infer $ ((Ann idDependent idDependentType) `At` Infer Star) `At` Infer Star) []
+  printLn $ quote0 $ evalInferable (((Ann idDependent idDependentType) `At` Infer Star) `At` Infer Star) []
   pure ()
