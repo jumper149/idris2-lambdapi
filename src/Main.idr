@@ -78,13 +78,13 @@ mutual
   substCheckable i r (Lambda e) = Lambda $ substCheckable (S i) r e
 
 mutual
-  quote : (n : Nat) ->
+  quote : (i : Nat) ->
           (v : Value) ->
           TermCheckable
-  quote n (VLambda f) = Lambda $ quote (S n) (f (vfree (Quote n)))
-  quote n (VNeutral x) = Inferred $ neutralQuote n x
-  quote n VStar = Inferred Star
-  quote n (VPi x f) = Inferred $ Pi (quote n x) (quote (S n) $ f $ vfree $ Quote n)
+  quote i (VLambda f) = Lambda $ quote (S i) (f (vfree (Quote i)))
+  quote i (VNeutral x) = Inferred $ neutralQuote i x
+  quote i VStar = Inferred Star
+  quote i (VPi x f) = Inferred $ Pi (quote i x) (quote (S i) $ f $ vfree $ Quote i)
 
   neutralQuote : Nat -> Neutral -> TermInferable
   neutralQuote i (NFree x) = case x of
