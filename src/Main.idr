@@ -60,22 +60,22 @@ mutual
 
 mutual
   substInferable : (n : Nat) ->
-                   (term1 : TermInferable) ->
-                   (term2 : TermInferable) ->
+                   (r : TermInferable) ->
+                   (term : TermInferable) ->
                    TermInferable
-  substInferable n term1 (Ann e t) = Ann (substCheckable n term1 e) (substCheckable n term1 t)
-  substInferable n term1 Star = Star
-  substInferable n term1 (Pi t t') = Pi (substCheckable n term1 t) (substCheckable (S n) term1 t')
-  substInferable n term1 (Bound i) = if n == i then term1 else Bound i
-  substInferable n term1 (Free x) = Free x
-  substInferable n term1 (At e e') = substInferable n term1 e `At` substCheckable n term1 e'
+  substInferable n r (Ann e t) = Ann (substCheckable n r e) (substCheckable n r t)
+  substInferable n r Star = Star
+  substInferable n r (Pi t t') = Pi (substCheckable n r t) (substCheckable (S n) r t')
+  substInferable n r (Bound i) = if n == i then r else Bound i
+  substInferable n r (Free x) = Free x
+  substInferable n r (At e e') = substInferable n r e `At` substCheckable n r e'
 
   substCheckable : (n : Nat) ->
-                   (term1 : TermInferable) ->
-                   (term2 : TermCheckable) ->
+                   (r : TermInferable) ->
+                   (term : TermCheckable) ->
                    TermCheckable
-  substCheckable n term1 (Inferred e) = Inferred $ substInferable n term1 e
-  substCheckable n term1 (Lambda e) = Lambda $ substCheckable (S n) term1 e
+  substCheckable n r (Inferred e) = Inferred $ substInferable n r e
+  substCheckable n r (Lambda e) = Lambda $ substCheckable (S n) r e
 
 mutual
   quote : (n : Nat) ->
