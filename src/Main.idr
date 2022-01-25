@@ -5,15 +5,15 @@ import Generics.Derive
 %language ElabReflection
 
 mutual
-  data TermUp = Ann TermDown TermDown
-              | Star
-              | Pi TermDown TermDown
-              | Bound Nat
-              | Free Reference
-              | At TermUp TermDown
+  data TermInferable = Ann TermCheckable TermCheckable
+                     | Star
+                     | Pi TermCheckable TermCheckable
+                     | Bound Nat
+                     | Free Reference
+                     | At TermInferable TermCheckable
 
-  data TermDown = Infer TermUp
-                | Lam TermDown
+  data TermCheckable = Infer TermInferable
+                     | Lam TermCheckable
 
   data Reference = Global String
                  | Local Nat
@@ -28,8 +28,8 @@ mutual
                | NApp Neutral Value
 
 %runElab deriveMutual
-  [ ("TermUp"   , [ Eq, Generic, Meta, Ord, Show ])
-  , ("TermDown" , [ Eq, Generic, Meta, Ord, Show ])
+  [ ("TermInferable" , [ Eq, Generic, Meta, Ord, Show ])
+  , ("TermCheckable", [ Eq, Generic, Meta, Ord, Show ])
   , ("Reference", [ Eq, Generic, Meta, Ord, Show ])
   ]
 
@@ -44,7 +44,7 @@ vapp (VNeutral n) v = VNeutral (NApp n v)
 vapp _ _ = ?impossibleVapp
 
 mutual
-  evalUp : (term : TermUp) ->
+  evalUp : (term : TermInferable) ->
            (env : List Value) ->
            Value
   evalUp (Ann e _) env = evalDown e env
@@ -56,7 +56,7 @@ mutual
   evalUp (Free x) env = vfree x
   evalUp (At e e') env = vapp (evalUp e env) (evalDown e' env)
 
-  evalDown : (term : TermDown) ->
+  evalDown : (term : TermCheckable) ->
              (env : List Value) ->
              Value
   evalDown (Infer i) env = evalUp i env
@@ -64,9 +64,9 @@ mutual
 
 mutual
   substUp : (n : Nat) ->
-            (term1 : TermUp) ->
-            (term2 : TermUp) ->
-            TermUp
+            (term1 : TermInferable) ->
+            (term2 : TermInferable) ->
+            TermInferable
   substUp n term1 (Ann e t) = Ann (substDown n term1 e) (substDown n term1 t)
   substUp n term1 Star = Star
   substUp n term1 (Pi t t') = Pi (substDown n term1 t) (substDown (S n) term1 t')
@@ -75,34 +75,34 @@ mutual
   substUp n term1 (At e e') = substUp n term1 e `At` substDown n term1 e'
 
   substDown : (n : Nat) ->
-              (term1 : TermUp) ->
-              (term2 : TermDown) ->
-              TermDown
+              (term1 : TermInferable) ->
+              (term2 : TermCheckable) ->
+              TermCheckable
   substDown n term1 (Infer e) = Infer $ substUp n term1 e
   substDown n term1 (Lam e) = Lam $ substDown (S n) term1 e
 
 mutual
   quote : (n : Nat) ->
           (v : Value) ->
-          TermDown
+          TermCheckable
   quote n (VLam f) = Lam $ quote (S n) (f (vfree (Quote n)))
   quote n (VNeutral x) = Infer $ neutralQuote n x
   quote n VStar = Infer Star
   quote n (VPi x f) = Infer $ Pi (quote n x) (quote (S n) $ f $ vfree $ Quote n)
 
-  neutralQuote : Nat -> Neutral -> TermUp
+  neutralQuote : Nat -> Neutral -> TermInferable
   neutralQuote i (NFree x) = case x of
     Quote k => Bound ((i `minus` k) `minus` 1)
     _ => Free x
   neutralQuote i (NApp n v) = neutralQuote i n `At` quote i v
 
-quote0 : Value -> TermDown
+quote0 : Value -> TermCheckable
 quote0 = quote 0
 
 mutual
   typeUp : (n : Nat) ->
            (context : List (Reference, Value)) ->
-           (term : TermUp) ->
+           (term : TermInferable) ->
            Either String Value
   typeUp n context (Ann e p) = do
     typeDown n context p VStar
@@ -130,7 +130,7 @@ mutual
 
   typeDown : (n : Nat) ->
              (context : List (Reference, Value)) ->
-             (term : TermDown) ->
+             (term : TermCheckable) ->
              (t : Value) ->
              Either String ()
   typeDown n context (Infer e) t = do
@@ -143,7 +143,7 @@ mutual
 
 
 typeUp0 : (context : List (Reference, Value)) ->
-          (term : TermUp) ->
+          (term : TermInferable) ->
           Either String Value
 typeUp0 = typeUp 0
 
